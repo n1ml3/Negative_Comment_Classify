@@ -77,6 +77,9 @@ def load_resources(model_filename):
 st.sidebar.title("🤖 Model Selector")
 metrics_data = load_metrics()
 
+# Filter out Random Forest
+metrics_data = [m for m in metrics_data if m['Model'] != 'Random Forest']
+
 if not metrics_data:
     st.error("Metrics file not found. Please run training script first.")
     st.stop()
