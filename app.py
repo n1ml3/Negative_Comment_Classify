@@ -1,243 +1,187 @@
 import streamlit as st
 import pandas as pd
-import xgboost as xgb
-import lightgbm as lgb
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import accuracy_score, classification_report
-import sys
+import pickle
+import json
 import os
+import sys
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Thêm thư mục hiện tại vào path để import preprocessing
+# Ensure preprocessing import works
 sys.path.append(os.getcwd())
 try:
     from preprocessing import prepare_data
 except ImportError:
-    # Fallback nếu chạy trực tiếp trong thư mục con
+    # Fallback if running inside subdirectory
     sys.path.append(os.path.join(os.getcwd(), 'StreamlitApp'))
     from preprocessing import prepare_data
 
-# Cấu hình trang
+# Page Configuration
 st.set_page_config(
-    page_title="Toxic Tweet Detector",
-    page_icon="🚫",
+    page_title="English Comment Classifier",
+    page_icon="🛡️",
     layout="wide"
 )
 
-# CSS tùy chỉnh
+# Custom CSS
 st.markdown("""
 <style>
-    .main {
-        background-color: #f5f5f5;
-    }
-    .stTextArea textarea {
-        background-color: #ffffff;
-    }
-    .result-box {
+    .result-card {
         padding: 20px;
         border-radius: 10px;
-        margin-top: 20px;
         text-align: center;
-        font-weight: bold;
-        font-size: 24px;
+        margin-bottom: 20px;
     }
     .toxic {
-        background-color: #ffcccc;
-        color: #d8000c;
-        border: 2px solid #d8000c;
+        background-color: #ffebee;
+        color: #c62828;
+        border: 2px solid #c62828;
     }
-    .normal {
-        background-color: #dff0d8;
-        color: #3c763d;
-        border: 2px solid #3c763d;
+    .non-toxic {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        border: 2px solid #2e7d32;
     }
-    .metric-card {
-        background-color: white;
-        padding: 15px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        text-align: center;
+    .stButton>button {
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Functions ---
-
+# Load Metrics
 @st.cache_data
-def load_data():
-    """Load dataset from csv"""
+def load_metrics():
     try:
-        # Thử các đường dẫn có thể
-        possible_paths = [
-            'data/Data_finish.csv',
-            'StreamlitApp/data/Data_finish.csv',
-            os.path.join(os.path.dirname(__file__), 'data/Data_finish.csv')
-        ]
+        with open('models/metrics.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+# Load Model & Vectorizer
+@st.cache_resource
+def load_resources(model_filename):
+    try:
+        # Load Vectorizer
+        with open('models/tfidf_vectorizer.pkl', 'rb') as f:
+            vectorizer = pickle.load(f)
         
-        df = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                df = pd.read_csv(path)
-                break
-        
-        if df is None:
-            st.error("Không tìm thấy file dữ liệu (Data_finish.csv).")
-            return None
+        # Load Model
+        with open(f'models/{model_filename}', 'rb') as f:
+            model = pickle.load(f)
             
-        # Loại bỏ giá trị null
-        df = df.dropna(subset=['tweet_ok'])
-        return df
+        return vectorizer, model
     except Exception as e:
-        st.error(f"Lỗi khi đọc dữ liệu: {e}")
-        return None
+        return None, None
 
-def train_model(df, model_type, params):
-    """Huấn luyện mô hình dựa trên lựa chọn"""
-    
-    X = df['tweet_ok']
-    y = df['class']
-    
-    # Split Data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # Vectorization
-    tfidf = TfidfVectorizer(max_features=5000, stop_words='english')
-    X_train_tfidf = tfidf.fit_transform(X_train)
-    X_test_tfidf = tfidf.transform(X_test)
-    
-    model = None
-    if model_type == "XGBoost":
-        model = xgb.XGBClassifier(
-            n_estimators=params['n_estimators'],
-            max_depth=params['max_depth'],
-            learning_rate=params['learning_rate'],
-            random_state=42,
-            use_label_encoder=False,
-            eval_metric='logloss'
-        )
-    elif model_type == "LightGBM":
-        model = lgb.LGBMClassifier(
-            n_estimators=params['n_estimators'],
-            num_leaves=params['num_leaves'],
-            learning_rate=params['learning_rate'],
-            random_state=42
-        )
-        
-    if model:
-        model.fit(X_train_tfidf, y_train)
-        y_pred = model.predict(X_test_tfidf)
-        acc = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred, output_dict=True)
-        return model, tfidf, acc, report
-    return None, None, 0, None
+# --- SIDEBAR ---
+st.sidebar.title("🤖 Model Selector")
+metrics_data = load_metrics()
 
-# --- Sidebar Configuration ---
-st.sidebar.title("⚙️ Model Configuration")
+if not metrics_data:
+    st.error("Metrics file not found. Please run training script first.")
+    st.stop()
 
-model_option = st.sidebar.selectbox(
-    "Chọn mô hình:",
-    ("XGBoost", "LightGBM")
+# Create dictionary for mapping display name to filename
+model_map = {item['Model']: item['Filename'] for item in metrics_data}
+model_names = list(model_map.keys())
+
+selected_model_name = st.sidebar.selectbox(
+    "Choose a model for prediction:",
+    model_names
 )
 
-params = {}
+selected_filename = model_map[selected_model_name]
 
-if model_option == "XGBoost":
-    st.sidebar.subheader("Tham số XGBoost")
-    params['n_estimators'] = st.sidebar.slider("Number of Estimators", 50, 500, 100, 50)
-    params['max_depth'] = st.sidebar.slider("Max Depth", 3, 20, 6)
-    params['learning_rate'] = st.sidebar.number_input("Learning Rate", 0.01, 0.5, 0.1, 0.01)
+# Load selected resources
+vectorizer, model = load_resources(selected_filename)
 
-elif model_option == "LightGBM":
-    st.sidebar.subheader("Tham số LightGBM")
-    params['n_estimators'] = st.sidebar.slider("Number of Estimators", 50, 500, 100, 50)
-    params['num_leaves'] = st.sidebar.slider("Num Leaves", 10, 100, 31)
-    params['learning_rate'] = st.sidebar.number_input("Learning Rate", 0.01, 0.5, 0.1, 0.01)
+if model:
+    st.sidebar.success(f"Loaded: {selected_model_name}")
+else:
+    st.sidebar.error("Failed to load model files.")
+    st.stop()
 
-if st.sidebar.button("🚀 Huấn luyện mô hình"):
-    with st.spinner("Đang tải dữ liệu và huấn luyện..."):
-        df = load_data()
-        if df is not None:
-            model, vectorizer, acc, report = train_model(df, model_option, params)
-            
-            # Lưu vào session state
-            st.session_state['model'] = model
-            st.session_state['vectorizer'] = vectorizer
-            st.session_state['accuracy'] = acc
-            st.session_state['report'] = report
-            st.session_state['model_name'] = model_option
-            
-            st.sidebar.success(f"Huấn luyện xong! Accuracy: {acc:.4f}")
+# --- MAIN PAGE ---
+st.title("🛡️ English Comment Classification")
+st.markdown("### Detect Toxic Comments using Machine Learning")
 
-# --- Main Page ---
-st.title("🚫 Toxic Tweet Classification")
-st.write("Hệ thống phân loại tweet độc hại sử dụng Machine Learning.")
+col1, col2 = st.columns([2, 1])
 
-# Hiển thị thông tin mô hình hiện tại
-if 'model' in st.session_state:
-    st.markdown("---")
-    st.subheader(f"Mô hình đang sử dụng: **{st.session_state['model_name']}**")
+with col1:
+    st.markdown("#### 📝 Enter Comment")
+    user_input = st.text_area("Type your english comment here...", height=150)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Độ chính xác (Accuracy)</h3>
-            <h2>{st.session_state['accuracy']:.2%}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        report = st.session_state['report']
-        macro_f1 = report['macro avg']['f1-score']
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>F1-Score (Macro)</h3>
-            <h2>{macro_f1:.2%}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("📝 Kiểm tra Tweet")
-    
-    user_input = st.text_area("Nhập nội dung tweet tiếng Anh:", height=100, placeholder="Type something here...")
-
-    if st.button("Phân tích"):
-        if user_input.strip() == "":
-            st.warning("Vui lòng nhập nội dung!")
+    if st.button("Analyze Sentiment", type="primary"):
+        if not user_input.strip():
+            st.warning("Please enter some text first.")
         else:
-            with st.spinner("Đang xử lý..."):
-                # Preprocessing
+            with st.spinner("Processing..."):
+                # 1. Preprocess
                 processed_text = prepare_data(user_input)
                 
-                # Show processed text
-                with st.expander("Xem dữ liệu sau khi tiền xử lý"):
-                    st.write(f"`{processed_text}`")
-
-                if processed_text.strip() == "":
-                    st.warning("Văn bản sau khi xử lý bị rỗng.")
-                else:
-                    # Prediction
-                    input_vector = st.session_state['vectorizer'].transform([processed_text])
-                    prediction = st.session_state['model'].predict(input_vector)[0]
-                    
+                # 2. Vectorize
+                input_vector = vectorizer.transform([processed_text])
+                
+                # 3. Predict
+                prediction = model.predict(input_vector)[0]
+                
+                # 4. Probabilities (if supported)
+                confidence = None
+                if hasattr(model, "predict_proba"):
                     try:
-                        probability = st.session_state['model'].predict_proba(input_vector)[0]
-                        confidence = probability[prediction]
+                        probs = model.predict_proba(input_vector)[0]
+                        confidence = probs[prediction]
                     except:
-                        confidence = 0.0 # Một số model cấu hình đặc biệt có thể không có predict_proba ngay
-                        
-                    # Display
-                    if prediction == 1: # Giả sử 1 là Toxic
-                        st.markdown(f'<div class="result-box toxic">TOXIC (Độc hại) <br> Độ tin cậy: {confidence:.2%}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="result-box normal">NORMAL (Bình thường) <br> Độ tin cậy: {confidence:.2%}</div>', unsafe_allow_html=True)
+                        pass
+                elif hasattr(model, "decision_function"):
+                    # LinearSVC doesn't have predict_proba by default
+                    pass
 
-else:
-    st.info("👈 Vui lòng chọn mô hình và nhấn **'Huấn luyện mô hình'** ở thanh bên trái để bắt đầu.")
-    st.markdown("""
-    ### Hướng dẫn:
-    1. Chọn loại mô hình (XGBoost hoặc LightGBM).
-    2. Điều chỉnh các tham số (Hyperparameters) nếu muốn.
-    3. Nhấn nút Huấn luyện.
-    4. Nhập văn bản để kiểm tra kết quả.
-    """)
+                # 5. Display Result
+                st.markdown("---")
+                if prediction == 1:
+                    conf_str = f"({confidence:.1%} confidence)" if confidence else ""
+                    st.markdown(f"""
+                        <div class="result-card toxic">
+                            <h2>⚠️ TOXIC DETECTED</h2>
+                            <p>This comment is classified as toxic/offensive. {conf_str}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    conf_str = f"({confidence:.1%} confidence)" if confidence else ""
+                    st.markdown(f"""
+                        <div class="result-card non-toxic">
+                            <h2>✅ NON-TOXIC</h2>
+                            <p>This comment is clean. {conf_str}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with st.expander("See Processed Text (Internal)"):
+                    st.code(processed_text)
+
+with col2:
+    st.markdown("#### 📊 Current Model Performance")
+    # Find metrics for selected model
+    current_metrics = next((item for item in metrics_data if item['Model'] == selected_model_name), None)
+    if current_metrics:
+        st.metric("Accuracy", f"{current_metrics['Accuracy']:.2%}")
+        st.metric("F1-Score", f"{current_metrics['F1-Score']:.2%}")
+        st.metric("Training Time", f"{current_metrics['Time (s)']} s")
+
+# --- COMPARISON SECTION ---
+st.markdown("---")
+st.header("📈 Model Comparison")
+
+df_metrics = pd.DataFrame(metrics_data)
+
+# Table
+st.dataframe(df_metrics[['Model', 'Accuracy', 'F1-Score', 'Precision', 'Recall', 'Time (s)']].style.highlight_max(axis=0, subset=['Accuracy', 'F1-Score'], color='#d1e7dd'), use_container_width=True)
+
+# Chart
+st.subheader("Accuracy Comparison")
+fig, ax = plt.subplots(figsize=(10, 4))
+sns.barplot(data=df_metrics, x='Accuracy', y='Model', palette='viridis', ax=ax)
+plt.xlim(0.8, 1.0) # Zoom in to see differences
+for i, v in enumerate(df_metrics['Accuracy']):
+    ax.text(v, i, f" {v:.2%}", va='center')
+st.pyplot(fig)

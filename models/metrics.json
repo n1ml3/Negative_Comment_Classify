@@ -1,0 +1,38 @@
+[
+    {
+        "Model": "Naive Bayes",
+        "Accuracy": 0.9027,
+        "F1-Score": 0.9003,
+        "Precision": 0.8989,
+        "Recall": 0.902,
+        "Time (s)": 0.02,
+        "Filename": "naive_bayes.pkl"
+    },
+    {
+        "Model": "Logistic Regression",
+        "Accuracy": 0.9424,
+        "F1-Score": 0.9403,
+        "Precision": 0.9437,
+        "Recall": 0.9376,
+        "Time (s)": 0.26,
+        "Filename": "logistic_regression.pkl"
+    },
+    {
+        "Model": "SVM (LinearSVC)",
+        "Accuracy": 0.9433,
+        "F1-Score": 0.9413,
+        "Precision": 0.9446,
+        "Recall": 0.9385,
+        "Time (s)": 0.22,
+        "Filename": "svm_linearsvc.pkl"
+    },
+    {
+        "Model": "Random Forest",
+        "Accuracy": 0.863,
+        "F1-Score": 0.85,
+        "Precision": 0.8976,
+        "Recall": 0.8372,
+        "Time (s)": 0.7,
+        "Filename": "random_forest.pkl"
+    }
+]
