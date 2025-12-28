@@ -1,11 +1,7 @@
 import streamlit as st
-import pandas as pd
 import pickle
-import json
 import os
 import sys
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Ensure preprocessing import works
 sys.path.append(os.getcwd())
@@ -48,64 +44,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load Metrics
-@st.cache_data
-def load_metrics():
-    try:
-        with open('models/metrics.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
-
 # Load Model & Vectorizer
 @st.cache_resource
-def load_resources(model_filename):
+def load_resources():
     try:
         # Load Vectorizer
         with open('models/tfidf_vectorizer.pkl', 'rb') as f:
             vectorizer = pickle.load(f)
         
-        # Load Model
-        with open(f'models/{model_filename}', 'rb') as f:
+        # Load Model (SVM Only)
+        with open('models/svm_linearsvc.pkl', 'rb') as f:
             model = pickle.load(f)
             
         return vectorizer, model
     except Exception as e:
         return None, None
 
-# --- SIDEBAR ---
-st.sidebar.title("🤖 Model Selector")
-metrics_data = load_metrics()
+# Load resources
+vectorizer, model = load_resources()
 
-# Filter out Random Forest
-metrics_data = [m for m in metrics_data if m['Model'] != 'Random Forest']
-
-if not metrics_data:
-    st.error("Metrics file not found. Please run training script first.")
-    st.stop()
-
-# Create dictionary for mapping display name to filename
-model_map = {item['Model']: item['Filename'] for item in metrics_data}
-model_names = list(model_map.keys())
-
-selected_model_name = st.sidebar.selectbox(
-    "Choose a model for prediction:",
-    model_names
-)
-
-selected_filename = model_map[selected_model_name]
-
-# Load selected resources
-vectorizer, model = load_resources(selected_filename)
-
-if model:
-    st.sidebar.success(f"Loaded: {selected_model_name}")
-else:
-    st.sidebar.error("Failed to load model files.")
+if not model:
+    st.error("Failed to load SVM model. Please ensure 'models/svm_linearsvc.pkl' exists.")
     st.stop()
 
 # --- MAIN PAGE ---
-st.title("🛡️ English Comment Classification")
+st.title("🛡️ English Comment Classification (SVM)")
 st.markdown("### Detect Toxic Comments using Machine Learning")
 
 col1, col2 = st.columns([2, 1])
@@ -137,7 +100,8 @@ with col1:
                     except:
                         pass
                 elif hasattr(model, "decision_function"):
-                    # LinearSVC doesn't have predict_proba by default
+                    # LinearSVC doesn't have predict_proba by default, but we can use decision_function for a score if needed
+                    # For now, we'll skip confidence for LinearSVC unless calibrated
                     pass
 
                 # 5. Display Result
@@ -163,28 +127,5 @@ with col1:
                     st.code(processed_text)
 
 with col2:
-    st.markdown("#### 📊 Current Model Performance")
-    # Find metrics for selected model
-    current_metrics = next((item for item in metrics_data if item['Model'] == selected_model_name), None)
-    if current_metrics:
-        st.metric("Accuracy", f"{current_metrics['Accuracy']:.2%}")
-        st.metric("F1-Score", f"{current_metrics['F1-Score']:.2%}")
-        st.metric("Training Time", f"{current_metrics['Time (s)']} s")
-
-# --- COMPARISON SECTION ---
-st.markdown("---")
-st.header("📈 Model Comparison")
-
-df_metrics = pd.DataFrame(metrics_data)
-
-# Table
-st.dataframe(df_metrics[['Model', 'Accuracy', 'F1-Score', 'Precision', 'Recall', 'Time (s)']].style.highlight_max(axis=0, subset=['Accuracy', 'F1-Score'], color='#d1e7dd'), use_container_width=True)
-
-# Chart
-st.subheader("Accuracy Comparison")
-fig, ax = plt.subplots(figsize=(10, 4))
-sns.barplot(data=df_metrics, x='Accuracy', y='Model', palette='viridis', ax=ax)
-plt.xlim(0.8, 1.0) # Zoom in to see differences
-for i, v in enumerate(df_metrics['Accuracy']):
-    ax.text(v, i, f" {v:.2%}", va='center')
-st.pyplot(fig)
+    st.markdown("#### ℹ️ Model Information")
+    st.info("Using **Support Vector Machine (LinearSVC)** for high-speed text classification.")
