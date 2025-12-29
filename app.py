@@ -15,7 +15,6 @@ except ImportError:
 # Page Configuration
 st.set_page_config(
     page_title="English Comment Classifier",
-    page_icon="🛡️",
     layout="wide"
 )
 
@@ -68,13 +67,13 @@ if not model:
     st.stop()
 
 # --- MAIN PAGE ---
-st.title("🛡️ English Comment Classification (SVM)")
+st.title("English Comment Classification (SVM)")
 st.markdown("### Detect Toxic Comments using Machine Learning")
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.markdown("#### 📝 Enter Comment")
+    st.markdown("####Enter Comment")
     user_input = st.text_area("Type your english comment here...", height=150)
     
     if st.button("Analyze Sentiment", type="primary"):
@@ -110,7 +109,7 @@ with col1:
                     conf_str = f"({confidence:.1%} confidence)" if confidence else ""
                     st.markdown(f"""
                         <div class="result-card toxic">
-                            <h2>⚠️ TOXIC DETECTED</h2>
+                            <h2>TOXIC DETECTED</h2>
                             <p>This comment is classified as toxic/offensive. {conf_str}</p>
                         </div>
                     """, unsafe_allow_html=True)
@@ -118,7 +117,7 @@ with col1:
                     conf_str = f"({confidence:.1%} confidence)" if confidence else ""
                     st.markdown(f"""
                         <div class="result-card non-toxic">
-                            <h2>✅ NON-TOXIC</h2>
+                            <h2>NON-TOXIC</h2>
                             <p>This comment is clean. {conf_str}</p>
                         </div>
                     """, unsafe_allow_html=True)
@@ -127,5 +126,5 @@ with col1:
                     st.code(processed_text)
 
 with col2:
-    st.markdown("#### ℹ️ Model Information")
+    st.markdown("#### Model Information")
     st.info("Using **Support Vector Machine (LinearSVC)** for high-speed text classification.")
